@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cursor Usage</title>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #ffffff;
+      --text-label: #a3a3a3;
+      --text-inactive: #757575;
+      --text-muted: #888;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      /* Neutral cool accent — not Cursor brand, keeps unofficial feel */
+      --accent: #7dd3fc;
+      --inactive-bar: #242424;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 12px;
+      color: var(--text);
+      background: var(--bg);
+      min-width: 280px;
+      max-width: 280px;
+      padding: 12px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.3px;
+    }
+
+    .tier-pill {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .section {
+      margin-bottom: 14px;
+    }
+
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .label {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-weight: 500;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .value {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--surface);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease, background-color 0.3s ease;
+      min-width: 0;
+    }
+
+    .reset-time {
+      font-size: 10px;
+      color: var(--text);
+      margin-top: 2px;
+      text-align: right;
+    }
+
+    .cycle-banner {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .cycle-banner strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .group-heading {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-label);
+      margin: 4px 0 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .extra-section {
+      margin-top: 10px;
+      padding: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .extra-section.over-limit {
+      background: rgba(239, 68, 68, 0.07);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .extra-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .extra-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .pill {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .pill-on {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .pill-off {
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .pill-neutral {
+      background: var(--surface);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .pill-active {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .pill-paused {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+
+    .extra-detail {
+      font-size: 11px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .extra-detail strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .extra-detail .over {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .extra-sub {
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .extra-note {
+      margin-top: 4px;
+      color: var(--red);
+      font-weight: 600;
+    }
+
+    .extra-bar-wrap {
+      margin-top: 6px;
+    }
+
+    .footer {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .meta {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .refresh-btn {
+      font-size: 10px;
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .refresh-btn:hover { border-color: var(--accent); }
+    .refresh-btn:active { opacity: 0.7; }
+
+    .error {
+      font-size: 10px;
+      color: var(--red);
+      margin-top: 4px;
+    }
+
+    .disclaimer {
+      font-size: 9px;
+      color: var(--text-inactive);
+      text-align: center;
+      margin-top: 8px;
+      letter-spacing: 0.2px;
+    }
+
+    .empty {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    .error-prompt {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .error-prompt-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--red);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .error-prompt-body {
+      font-size: 11px;
+      color: var(--text);
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+
+    .error-prompt-body ol {
+      margin: 4px 0 0 16px;
+      padding: 0;
+    }
+
+    .error-prompt-body li {
+      margin-bottom: 2px;
+    }
+
+    .open-usage-btn {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 3px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-family: inherit;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    .open-usage-btn:hover { opacity: 0.85; }
+    .open-usage-btn:active { opacity: 0.7; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-title">Cursor Usage</span>
+    <span class="tier-pill" id="tier-pill">—</span>
+  </div>
+
+  <div class="error-prompt" id="error-prompt" style="display:none;">
+    <div class="error-prompt-title" id="error-prompt-title">Can't load usage</div>
+    <div class="error-prompt-body" id="error-prompt-body"></div>
+    <button class="open-usage-btn" id="open-usage-btn">Open cursor.com/dashboard/usage</button>
+  </div>
+
+  <div class="cycle-banner" id="cycle-banner" style="display:none;"></div>
+
+  <div class="group-heading" id="pools-heading" style="display:none;">Monthly pools</div>
+  <div id="pools-slot"></div>
+
+  <div class="extra-section" id="ondemand-section">
+    <div class="extra-header">
+      <span class="extra-label">On-demand</span>
+      <div>
+        <span id="ondemand-enabled-pill" class="pill pill-neutral">—</span>
+        <span id="ondemand-active-pill" class="pill pill-active" style="display:none;">IN USE</span>
+      </div>
+    </div>
+    <div class="extra-detail" id="ondemand-detail">Waiting for data…</div>
+    <div class="extra-bar-wrap" id="ondemand-bar-wrap" style="display:none;">
+      <div class="bar-track" id="ondemand-bar-track" role="progressbar" aria-label="On-demand monthly spend" aria-valuemin="0" aria-valuemax="100">
+        <div class="bar-fill" id="ondemand-bar" style="width: 0%;"></div>
+      </div>
+      <div class="reset-time" id="ondemand-reset"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span class="meta" id="meta-label">Waiting for data…</span>
+    <button class="refresh-btn" id="refresh-btn">Refresh</button>
+  </div>
+  <div class="error" id="error-label" style="display:none;"></div>
+  <div class="disclaimer">Unofficial — not affiliated with Cursor / Anysphere</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
