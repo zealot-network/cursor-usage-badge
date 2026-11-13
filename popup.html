@@ -4,60 +4,159 @@
   <meta charset="UTF-8" />
   <title>Cursor Usage</title>
   <style>
+    /* xAI brand standards — All Brand Standards DB (Notion) */
+    @font-face {
+      font-family: "Inter";
+      src: url("fonts/Inter-Regular.woff2") format("woff2");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Inter";
+      src: url("fonts/Inter-Medium.woff2") format("woff2");
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+
     :root {
-      --bg: #0f0f0f;
-      --surface: #1a1a1a;
-      --border: #2a2a2a;
-      --text: #ffffff;
-      --text-label: #a3a3a3;
-      --text-inactive: #757575;
-      --text-muted: #888;
+      --bg: #0A0A0A;
+      --surface: #0C0C0B;
+      --border: #1A1A1A;
+      --border-soft: rgba(255, 255, 255, 0.1);
+      --border-btn: rgba(255, 255, 255, 0.25);
+      --text: #FFFFFF;
+      --text-85: rgba(255, 255, 255, 0.85);
+      --text-50: rgba(255, 255, 255, 0.5);
+      --text-muted: rgba(255, 255, 255, 0.5);
+      /* Brand accents: xAI orange + SpaceX cobalt (store kit) */
+      --orange: #FF6308;
+      --cobalt: #01579B;
+      --orange-10: rgba(255, 99, 8, 0.1);
+      --steel-10: rgba(189, 201, 230, 0.1);
+      --sky-10: rgba(151, 196, 255, 0.1);
+      --cobalt-10: rgba(1, 87, 155, 0.1);
+      --hover-wash: rgba(255, 255, 255, 0.1);
+      --focus: #3B82F6;
+      /* Accent for titles/CTAs */
+      --accent: #FF6308;
+      /* Live severity bars — Claude Usage Badge traffic-light scheme */
       --green: #22c55e;
       --amber: #f59e0b;
       --red: #ef4444;
-      /* Neutral cool accent — not Cursor brand, keeps unofficial feel */
-      --accent: #7dd3fc;
-      --inactive-bar: #242424;
+      --track: rgba(255, 255, 255, 0.06);
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, ui-monospace, monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      position: relative;
+      font-family: var(--font-sans);
       font-size: 12px;
+      font-weight: 400;
       color: var(--text);
       background: var(--bg);
-      min-width: 280px;
-      max-width: 280px;
-      padding: 12px;
+      min-width: 300px;
+      max-width: 300px;
+      padding: 16px;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    /* Ambient ignition wash — orange → steel → sky at 10% alpha */
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 120px;
+      pointer-events: none;
+      background: linear-gradient(
+        105deg,
+        var(--orange-10) 0%,
+        var(--steel-10) 50%,
+        var(--cobalt-10) 100%
+      );
+      mask-image: linear-gradient(to bottom, black, transparent);
+      -webkit-mask-image: linear-gradient(to bottom, black, transparent);
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
     }
 
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
 
     .header-title {
-      font-size: 13px;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
       color: var(--accent);
-      letter-spacing: 0.3px;
     }
 
     .tier-pill {
+      font-family: var(--font-mono);
       font-size: 9px;
-      font-weight: 600;
+      font-weight: 400;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 2px 6px;
-      border-radius: 3px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: transparent;
+      border: 1px solid var(--border-btn);
+      color: var(--text-50);
+    }
+
+    .mono-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      color: var(--text-50);
+      margin: 2px 0 10px;
+    }
+
+    .cycle-banner {
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--text-85);
+      line-height: 1.45;
+      margin-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .cycle-banner strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .cycle-banner .countdown {
+      display: block;
+      margin-top: 2px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--text-50);
+      text-transform: uppercase;
     }
 
     .section {
@@ -69,277 +168,351 @@
       justify-content: space-between;
       align-items: baseline;
       gap: 8px;
-      margin-bottom: 5px;
+      margin-bottom: 6px;
     }
 
     .label {
       flex: 1 1 auto;
       min-width: 0;
-      font-weight: 500;
+      font-weight: 400;
       font-size: 11px;
-      line-height: 1.4;
+      line-height: 1.35;
+      letter-spacing: -0.015em;
       color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
 
     .value {
       flex: 0 0 auto;
       white-space: nowrap;
-      font-weight: 600;
-      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 400;
+      font-size: 11px;
+      letter-spacing: 0.02em;
       color: var(--text);
       font-variant-numeric: tabular-nums;
     }
 
     .bar-track {
       width: 100%;
-      height: 6px;
-      background: var(--surface);
-      border-radius: 3px;
+      height: 3px;
+      background: var(--track);
+      border-radius: 0;
       overflow: hidden;
-      border: 1px solid var(--border);
+      border: none;
     }
 
     .bar-fill {
       height: 100%;
-      border-radius: 3px;
-      transition: width 0.3s ease, background-color 0.3s ease;
+      border-radius: 0;
+      transition: width 0.35s ease, background-color 0.35s ease;
       min-width: 0;
     }
 
     .reset-time {
-      font-size: 10px;
-      color: var(--text);
-      margin-top: 2px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-50);
+      margin-top: 4px;
       text-align: right;
     }
 
-    .cycle-banner {
-      font-size: 10px;
-      color: var(--text-muted);
-      margin-bottom: 12px;
-      line-height: 1.4;
-    }
-
-    .cycle-banner strong {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .group-heading {
-      font-size: 9px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-      color: var(--text-label);
-      margin: 4px 0 10px;
-      padding-bottom: 5px;
-      border-bottom: 1px dashed var(--border);
-    }
-
     .extra-section {
-      margin-top: 10px;
-      padding: 8px;
+      margin-top: 4px;
+      padding: 12px;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 6px;
+      border-radius: 0;
+      position: relative;
     }
 
+    /* Scope crosshair pips — xAI product-card hover vocabulary */
+    .pip {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--text);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+    .pip-tl { top: -1px; left: -1px; }
+    .pip-tr { top: -1px; right: -1px; }
+    .pip-bl { bottom: -1px; left: -1px; }
+    .pip-br { bottom: -1px; right: -1px; }
+    .extra-section:hover .pip { opacity: 1; }
+
     .extra-section.over-limit {
-      background: rgba(239, 68, 68, 0.07);
-      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(249, 117, 131, 0.06);
+      border-color: rgba(249, 117, 131, 0.35);
     }
 
     .extra-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
     .extra-label {
-      font-size: 11px;
-      font-weight: 500;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 400;
       color: var(--text);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.08em;
     }
 
     .pill {
+      font-family: var(--font-mono);
       font-size: 9px;
-      font-weight: 700;
+      font-weight: 400;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 2px 6px;
-      border-radius: 3px;
+      letter-spacing: 0.1em;
+      padding: 2px 7px;
+      border-radius: 999px;
     }
 
     .pill-on {
-      background: rgba(34, 197, 94, 0.15);
+      background: transparent;
       color: var(--green);
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      border: 1px solid rgba(117, 251, 166, 0.35);
     }
 
     .pill-off {
-      background: var(--surface);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-50);
+      border: 1px solid var(--border-btn);
     }
 
     .pill-neutral {
-      background: var(--surface);
-      color: var(--text-muted);
-      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-50);
+      border: 1px solid var(--border-soft);
     }
 
     .pill-active {
-      background: rgba(245, 158, 11, 0.15);
+      background: transparent;
       color: var(--amber);
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      border: 1px solid rgba(255, 171, 112, 0.4);
     }
 
     .pill-paused {
-      background: rgba(239, 68, 68, 0.15);
+      background: transparent;
       color: var(--red);
-      border: 1px solid rgba(239, 68, 68, 0.35);
+      border: 1px solid rgba(249, 117, 131, 0.4);
     }
 
     .extra-detail {
       font-size: 11px;
-      color: var(--text);
+      color: var(--text-85);
       line-height: 1.5;
+      letter-spacing: -0.01em;
     }
 
     .extra-detail strong {
       color: var(--text);
-      font-weight: 700;
+      font-weight: 500;
     }
 
     .extra-detail .over {
       color: var(--red);
-      font-weight: 700;
+      font-weight: 500;
     }
 
     .extra-sub {
-      color: var(--text-muted);
-      margin-top: 2px;
+      color: var(--text-50);
+      margin-top: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.02em;
     }
 
     .extra-note {
-      margin-top: 4px;
+      margin-top: 6px;
       color: var(--red);
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .extra-bar-wrap {
-      margin-top: 6px;
+      margin-top: 8px;
     }
 
     .footer {
-      margin-top: 10px;
-      padding-top: 8px;
+      margin-top: 14px;
+      padding-top: 12px;
       border-top: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
     }
 
     .meta {
-      font-size: 10px;
-      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-50);
     }
 
     .refresh-btn {
+      font-family: var(--font-mono);
       font-size: 10px;
-      color: var(--accent);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 3px;
-      padding: 2px 8px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--border-btn);
+      border-radius: 999px;
+      padding: 5px 12px;
       cursor: pointer;
-      font-family: inherit;
-      transition: border-color 0.15s;
+      transition: background 0.15s ease, border-color 0.15s ease;
     }
 
-    .refresh-btn:hover { border-color: var(--accent); }
-    .refresh-btn:active { opacity: 0.7; }
+    .refresh-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    .refresh-btn:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .refresh-btn:active { opacity: 0.75; }
+    .refresh-btn:disabled { opacity: 0.5; cursor: default; }
 
     .error {
-      font-size: 10px;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.03em;
       color: var(--red);
-      margin-top: 4px;
+      margin-top: 8px;
     }
 
     .disclaimer {
-      font-size: 9px;
-      color: var(--text-inactive);
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.28);
       text-align: center;
-      margin-top: 8px;
-      letter-spacing: 0.2px;
+      margin-top: 12px;
     }
 
     .empty {
       font-size: 11px;
-      color: var(--text-muted);
-      font-style: italic;
-      text-align: center;
-      padding: 8px 0;
+      color: var(--text-50);
+      font-style: normal;
+      text-align: left;
+      padding: 4px 0 8px;
+      letter-spacing: -0.01em;
     }
 
     .error-prompt {
-      background: rgba(239, 68, 68, 0.08);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 6px;
-      padding: 10px;
-      margin-bottom: 10px;
+      background: var(--surface);
+      border: 1px solid rgba(249, 117, 131, 0.35);
+      border-radius: 0;
+      padding: 12px;
+      margin-bottom: 14px;
     }
 
     .error-prompt-title {
-      font-size: 11px;
-      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 400;
       color: var(--red);
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       text-transform: uppercase;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.1em;
     }
 
     .error-prompt-body {
       font-size: 11px;
-      color: var(--text);
+      color: var(--text-85);
       line-height: 1.5;
-      margin-bottom: 8px;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
     }
 
     .error-prompt-body ol {
-      margin: 4px 0 0 16px;
+      margin: 6px 0 0 16px;
       padding: 0;
     }
 
     .error-prompt-body li {
-      margin-bottom: 2px;
+      margin-bottom: 3px;
+    }
+
+    .error-prompt-body strong {
+      color: var(--text);
+      font-weight: 500;
     }
 
     .open-usage-btn {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
       color: var(--bg);
-      background: var(--accent);
-      border: none;
-      border-radius: 3px;
-      padding: 5px 10px;
+      background: var(--text);
+      border: 1px solid var(--text);
+      border-radius: 999px;
+      padding: 7px 14px;
       cursor: pointer;
-      font-family: inherit;
-      text-decoration: none;
-      transition: opacity 0.15s;
+      transition: opacity 0.15s ease;
     }
 
     .open-usage-btn:hover { opacity: 0.85; }
+    .open-usage-btn:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
     .open-usage-btn:active { opacity: 0.7; }
+
+    .open-legacy-btn {
+      margin-top: 8px;
+      color: var(--text);
+      background: transparent;
+      border-color: var(--border-btn);
+    }
+
+    .breakdown {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      color: var(--text-50);
+    }
+
+    .breakdown li {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+    }
+
+    .horizon {
+      height: 1px;
+      margin: 14px 0;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
+      opacity: 0.4;
+    }
   </style>
 </head>
 <body>
+  <div class="shell">
 
   <div class="header">
     <span class="header-title">Cursor Usage</span>
@@ -349,25 +522,32 @@
   <div class="error-prompt" id="error-prompt" style="display:none;">
     <div class="error-prompt-title" id="error-prompt-title">Can't load usage</div>
     <div class="error-prompt-body" id="error-prompt-body"></div>
-    <button class="open-usage-btn" id="open-usage-btn">Open cursor.com/dashboard/usage</button>
+    <button class="open-usage-btn" id="open-usage-btn">Open Grok dashboard</button>
+    <button class="open-usage-btn open-legacy-btn" id="open-legacy-btn">Legacy: Cursor dashboard</button>
   </div>
 
   <div class="cycle-banner" id="cycle-banner" style="display:none;"></div>
 
-  <div class="group-heading" id="pools-heading" style="display:none;">Monthly pools</div>
+  <div class="mono-tag" id="pools-heading" style="display:none;">[ Monthly pools ]</div>
   <div id="pools-slot"></div>
 
+  <div class="horizon" id="ondemand-horizon"></div>
+
   <div class="extra-section" id="ondemand-section">
+    <span class="pip pip-tl" aria-hidden="true"></span>
+    <span class="pip pip-tr" aria-hidden="true"></span>
+    <span class="pip pip-bl" aria-hidden="true"></span>
+    <span class="pip pip-br" aria-hidden="true"></span>
     <div class="extra-header">
-      <span class="extra-label">On-demand</span>
+      <span class="extra-label" id="ondemand-label">On-demand</span>
       <div>
         <span id="ondemand-enabled-pill" class="pill pill-neutral">—</span>
-        <span id="ondemand-active-pill" class="pill pill-active" style="display:none;">IN USE</span>
+        <span id="ondemand-active-pill" class="pill pill-active" style="display:none;">In use</span>
       </div>
     </div>
     <div class="extra-detail" id="ondemand-detail">Waiting for data…</div>
     <div class="extra-bar-wrap" id="ondemand-bar-wrap" style="display:none;">
-      <div class="bar-track" id="ondemand-bar-track" role="progressbar" aria-label="On-demand monthly spend" aria-valuemin="0" aria-valuemax="100">
+      <div class="bar-track" id="ondemand-bar-track" role="progressbar" aria-label="Monthly additional spend" aria-valuemin="0" aria-valuemax="100">
         <div class="bar-fill" id="ondemand-bar" style="width: 0%;"></div>
       </div>
       <div class="reset-time" id="ondemand-reset"></div>
@@ -379,8 +559,9 @@
     <button class="refresh-btn" id="refresh-btn">Refresh</button>
   </div>
   <div class="error" id="error-label" style="display:none;"></div>
-  <div class="disclaimer">Unofficial — not affiliated with Cursor / Anysphere</div>
+  <div class="disclaimer">Unofficial — not affiliated with Cursor, Grok or SpaceXSI</div>
 
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

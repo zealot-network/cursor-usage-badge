@@ -1,7 +1,9 @@
 // popup.js — Reads UsageState from storage and renders the popup UI.
 
 const DEFAULT_STATE = {
+  mode: null,
   pools: {
+    weekly: null,
     cursorModels: null,
     otherModels: null,
   },
@@ -21,6 +23,8 @@ const DEFAULT_STATE = {
     utilization: null,
     overLimit: null,
     inUse: null,
+    resetsAt: null,
+    creditBalanceUsd: null,
   },
   subscriptionTier: null,
   billingCycleStart: null,
@@ -32,35 +36,29 @@ const DEFAULT_STATE = {
 };
 
 const USAGE_URL = "https://cursor.com/dashboard/usage";
+const UNIFIED_USAGE_URL = "https://grok.com/dashboard/usage";
+
+const SIGN_IN_STEPS =
+  "<li>On The X Subscription: open <strong>grok.com/dashboard/usage</strong></li>" +
+  "<li>On a legacy Cursor plan: open <strong>cursor.com/dashboard/usage</strong></li>" +
+  "<li>Sign in if prompted, then come back and click <strong>Refresh</strong></li></ol>";
 
 const ERROR_COPY = {
   no_session: {
-    title: "Sign in to Cursor",
-    body:
-      "We couldn't find a Cursor session. To load your usage data:<ol>" +
-      "<li>Open <strong>cursor.com/dashboard/usage</strong></li>" +
-      "<li>Come back and click <strong>Refresh</strong></li></ol>",
+    title: "Sign in to load usage",
+    body: "We couldn't find a signed-in session. To load your usage data:<ol>" + SIGN_IN_STEPS,
   },
   auth: {
-    title: "Cursor session expired",
-    body:
-      "Your Cursor session has expired or isn't authorized. To reconnect:<ol>" +
-      "<li>Open <strong>cursor.com/dashboard/usage</strong> and sign in if prompted</li>" +
-      "<li>Come back and click <strong>Refresh</strong></li></ol>",
+    title: "Session expired",
+    body: "Your session has expired or isn't authorized. To reconnect:<ol>" + SIGN_IN_STEPS,
   },
   network: {
-    title: "Can't reach cursor.com",
-    body:
-      "We hit a network error fetching your usage. To retry:<ol>" +
-      "<li>Open <strong>cursor.com/dashboard/usage</strong> to confirm you're online</li>" +
-      "<li>Come back and click <strong>Refresh</strong></li></ol>",
+    title: "Can't reach the dashboard",
+    body: "We hit a network error fetching your usage. To retry:<ol>" + SIGN_IN_STEPS,
   },
   unknown: {
     title: "Couldn't load usage",
-    body:
-      "Something went wrong reading your usage. To retry:<ol>" +
-      "<li>Open <strong>cursor.com/dashboard/usage</strong></li>" +
-      "<li>Come back and click <strong>Refresh</strong></li></ol>",
+    body: "Something went wrong reading your usage. To retry:<ol>" + SIGN_IN_STEPS,
   },
 };
 
@@ -70,9 +68,19 @@ function barColor(pct) {
   return "var(--green)";
 }
 
+// Match cursor.com/dashboard/spending: fractional usage under 0.5% still
+// renders as "1% used" (Math.round alone shows 0% while the bar ticks).
+function displayPct(pct) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  if (pct <= 0) return 0;
+  const rounded = Math.round(pct);
+  return rounded === 0 ? 1 : Math.min(999, rounded);
+}
+
 function formatPct(pct) {
-  if (pct == null) return "—";
-  return `${Math.round(pct)}%`;
+  const n = displayPct(pct);
+  if (n == null) return "—";
+  return `${n}%`;
 }
 
 function formatResetTime(ts) {
@@ -86,18 +94,21 @@ function formatResetTime(ts) {
     const rm = mins % 60;
     return rm > 0 ? `Resets in ${hrs}h ${rm}m` : `Resets in ${hrs}h`;
   }
-  const days = Math.floor(hrs / 24);
-  const rh = hrs % 24;
-  return rh > 0 ? `Resets in ${days}d ${rh}h` : `Resets in ${days}d`;
+  // Prefer whole days left (spending page: "31 days left").
+  const days = Math.max(1, Math.ceil(diff / 86400000));
+  return `Resets in ${days}d`;
 }
 
 function formatCycleDate(ts) {
   if (!ts) return "";
   try {
+    // Spending page shows the UTC calendar day of billingCycleEnd
+    // (e.g. Aug 26), not the local-TZ day which can be Aug 25.
     return new Date(ts).toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
+      timeZone: "UTC",
     });
   } catch {
     return "";
@@ -108,17 +119,20 @@ function formatLastUpdated(ts) {
   if (!ts) return "No data yet";
   const diff = Date.now() - ts;
   const mins = Math.round(diff / 60000);
-  if (mins <= 0) return "Updated just now";
-  if (mins === 1) return "Updated 1m ago";
-  if (mins < 60) return `Updated ${mins}m ago`;
+  if (mins <= 0) return "Just now";
+  if (mins === 1) return "1m ago";
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  return `Updated ${hrs}h ago`;
+  return `${hrs}h ago`;
 }
 
 function formatTier(tier) {
   if (!tier) return "—";
   const map = {
     free: "Free",
+    plus: "Plus",
+    premium: "Premium",
+    super: "Super",
     pro: "Pro",
     pro_plus: "Pro+",
     ultra: "Ultra",
@@ -128,7 +142,7 @@ function formatTier(tier) {
   return map[tier] || tier;
 }
 
-function buildBarSection({ label, valueText, pct, resetsAt, overLimit }) {
+function buildBarSection({ label, valueText, pct, resetsAt, overLimit, products }) {
   const fillPct = pct != null ? Math.min(100, pct) : 0;
 
   const section = document.createElement("div");
@@ -162,11 +176,28 @@ function buildBarSection({ label, valueText, pct, resetsAt, overLimit }) {
   fill.style.backgroundColor = pct != null ? barColor(pct) : "var(--surface)";
   section.querySelector(".reset-time").textContent = formatResetTime(resetsAt);
 
+  if (Array.isArray(products) && products.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "breakdown";
+    list.setAttribute("aria-label", `${label} by product`);
+    for (const p of products) {
+      const li = document.createElement("li");
+      const name = document.createElement("span");
+      name.textContent = p.label;
+      const val = document.createElement("span");
+      val.textContent = `${p.pct}%`;
+      li.append(name, val);
+      list.appendChild(li);
+    }
+    section.appendChild(list);
+  }
+
   return section;
 }
 
 function hasPoolData(state) {
   return !!(
+    state.pools?.weekly?.utilization != null ||
     state.pools?.cursorModels?.utilization != null ||
     state.pools?.otherModels?.utilization != null
   );
@@ -175,6 +206,7 @@ function hasPoolData(state) {
 function render(state) {
   const $ = (id) => document.getElementById(id);
 
+  const unified = state.mode === "unified";
   const hasErrorCode = !!state.errorCode;
   const showPrompt = hasErrorCode && !hasPoolData(state);
 
@@ -199,8 +231,8 @@ function render(state) {
   const tierEl = $("tier-pill");
   tierEl.textContent = formatTier(state.subscriptionTier);
   tierEl.title = state.subscriptionTier
-    ? "Detected Cursor plan"
-    : "Plan not detected yet — open cursor.com/dashboard/usage and refresh";
+    ? unified ? "Detected plan (The X Subscription)" : "Detected Cursor plan"
+    : "Plan not detected yet — open your usage dashboard and refresh";
 
   // Billing cycle countdown banner
   const cycleEl = $("cycle-banner");
@@ -208,8 +240,8 @@ function render(state) {
     const dateStr = formatCycleDate(state.billingCycleEnd);
     const countdown = formatResetTime(state.billingCycleEnd);
     cycleEl.innerHTML = dateStr
-      ? `Limits reset <strong>${dateStr}</strong> · ${countdown}`
-      : countdown;
+      ? `${unified ? "Weekly pool resets" : "Limits reset"} <strong>${dateStr}</strong><span class="countdown">${countdown}</span>`
+      : `<span class="countdown">${countdown}</span>`;
     cycleEl.style.display = "";
   } else {
     cycleEl.style.display = "none";
@@ -222,21 +254,31 @@ function render(state) {
 
   const resetsAt = state.billingCycleEnd;
   const pools = [];
-  if (state.pools?.cursorModels) {
+  poolsHeading.textContent = unified ? "[ Weekly included ]" : "[ Monthly pools ]";
+  if (unified && state.pools?.weekly) {
+    pools.push({
+      label: "Cursor · Grok · Grok Bot",
+      utilization: state.pools.weekly.utilization,
+      products: state.pools.weekly.products,
+    });
+  }
+  if (!unified && state.pools?.cursorModels) {
     pools.push({
       label: state.pools.cursorModels.label || "Cursor Models",
       utilization: state.pools.cursorModels.utilization,
     });
   }
-  if (state.pools?.otherModels) {
+  if (!unified && state.pools?.otherModels) {
     pools.push({
       label: state.pools.otherModels.label || "Other Models",
       utilization: state.pools.otherModels.utilization,
     });
   }
 
+  const horizon = $("ondemand-horizon");
   if (pools.length > 0) {
     poolsHeading.style.display = "";
+    if (horizon) horizon.style.display = "";
     for (const p of pools) {
       const pct = p.utilization;
       poolsSlot.appendChild(
@@ -245,18 +287,21 @@ function render(state) {
           valueText: formatPct(pct),
           pct,
           resetsAt,
+          products: p.products,
           overLimit: pct != null && pct > 100,
         })
       );
     }
   } else if (!showPrompt) {
     poolsHeading.style.display = "none";
+    if (horizon) horizon.style.display = "";
     const empty = document.createElement("div");
     empty.className = "empty";
     empty.textContent = "No pool data yet";
     poolsSlot.appendChild(empty);
   } else {
     poolsHeading.style.display = "none";
+    if (horizon) horizon.style.display = "none";
   }
 
   // On-demand card
@@ -294,6 +339,13 @@ function render(state) {
 
   $("ondemand-active-pill").style.display = active && inUse && !overLimit ? "inline" : "none";
 
+  $("ondemand-label").textContent = unified ? "Additional usage" : "On-demand";
+  const odResetsAt = unified ? od.resetsAt : state.billingCycleEnd;
+  const creditLine =
+    unified && od.creditBalanceUsd != null
+      ? `<div class="extra-sub">Credit balance $${od.creditBalanceUsd.toFixed(2)}</div>`
+      : "";
+
   const detailEl = $("ondemand-detail");
   const barWrap = $("ondemand-bar-wrap");
   const odBar = $("ondemand-bar");
@@ -304,10 +356,15 @@ function render(state) {
     detailEl.textContent = "Waiting for data…";
     barWrap.style.display = "none";
   } else if (!active) {
-    detailEl.textContent = "Off — enable on-demand to continue past included usage";
+    if (unified) {
+      detailEl.innerHTML =
+        "Off — third-party models and usage past the weekly pool are paused" + creditLine;
+    } else {
+      detailEl.textContent = "Off — enable on-demand to continue past included usage";
+    }
     barWrap.style.display = "none";
   } else {
-    const uPct = typeof od.utilization === "number" ? Math.round(od.utilization) : null;
+    const uPct = typeof od.utilization === "number" ? displayPct(od.utilization) : null;
     const parts = [];
     if (od.usedUsd != null && od.limitUsd != null && od.limitUsd > 0) {
       const pctTag =
@@ -318,7 +375,11 @@ function render(state) {
         `<strong>$${od.usedUsd.toFixed(2)}</strong> of $${od.limitUsd.toFixed(2)}${pctTag}`
       );
     } else if (od.usedUsd != null) {
-      parts.push(`<strong>$${od.usedUsd.toFixed(2)}</strong> spent (no monthly cap)`);
+      parts.push(
+        unified
+          ? `<strong>$${od.usedUsd.toFixed(2)}</strong> used this month (no monthly limit)`
+          : `<strong>$${od.usedUsd.toFixed(2)}</strong> spent (no monthly cap)`
+      );
     }
 
     let html = parts.join(" · ") || "Enabled — no spend data yet";
@@ -326,7 +387,11 @@ function render(state) {
       html += `<div class="extra-sub">$${od.remainingUsd.toFixed(2)} remaining</div>`;
     }
     if (overLimit) {
-      html += `<div class="extra-note">Over your on-demand monthly limit</div>`;
+      html += `<div class="extra-note">Over your ${unified ? "additional usage" : "on-demand"} monthly limit</div>`;
+    }
+    html += creditLine;
+    if (unified && od.resetsAt && !(od.limitUsd > 0)) {
+      html += `<div class="extra-sub">Monthly spend ${formatResetTime(od.resetsAt).toLowerCase()}</div>`;
     }
     detailEl.innerHTML = html;
 
@@ -339,12 +404,12 @@ function render(state) {
       odBar.style.width = `${Math.min(100, pct)}%`;
       odBar.style.backgroundColor = barColor(pct);
       if (odBarTrack) {
-        odBarTrack.setAttribute("aria-valuenow", String(Math.round(Math.min(100, pct))));
+        odBarTrack.setAttribute("aria-valuenow", String(displayPct(Math.min(100, pct)) ?? 0));
         if (overLimit) {
-          odBarTrack.setAttribute("aria-valuetext", `${Math.round(pct)}% — over limit`);
+          odBarTrack.setAttribute("aria-valuetext", `${displayPct(pct)}% — over limit`);
         }
       }
-      odResetEl.textContent = formatResetTime(state.billingCycleEnd);
+      odResetEl.textContent = formatResetTime(odResetsAt);
       barWrap.style.display = "";
     } else {
       barWrap.style.display = "none";
@@ -418,6 +483,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("open-usage-btn").addEventListener("click", () => {
+    chrome.tabs.create({ url: UNIFIED_USAGE_URL });
+  });
+  document.getElementById("open-legacy-btn").addEventListener("click", () => {
     chrome.tabs.create({ url: USAGE_URL });
   });
 });

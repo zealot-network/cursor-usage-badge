@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Cursor Usage Badge",
-  "version": "0.1.0",
-  "description": "Unofficial Cursor usage badge: Cursor Models pool, Other Models pool, on-demand spend, and plan tier.",
+  "name": "Cursor Usage Tracker & Badge",
+  "version": "0.2.0",
+  "description": "Unofficial Cursor usage tracker: weekly X Subscription pool, legacy monthly pools, additional usage spend, and plan tier.",
   "homepage_url": "https://github.com/zealot-network/cursor-usage-badge",
   "minimum_chrome_version": "111",
   "icons": {
@@ -17,14 +17,15 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://cursor.com/*"
+    "https://cursor.com/*",
+    "https://grok.com/*"
   ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "Cursor Usage Badge",
+    "default_title": "Cursor Usage Tracker & Badge",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

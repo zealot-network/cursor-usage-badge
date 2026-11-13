@@ -1,16 +1,26 @@
 // background.js — MV3 service worker
 // Single source of truth for Cursor usage state; drives the badge.
 //
-// Polls Cursor's unofficial dashboard endpoint GET /api/usage-summary
-// (same data the web dashboard uses). Auth is the WorkosCursorSessionToken
-// cookie — chrome.cookies + host_permissions let the service worker call
-// with credentials: "include".
+// Two account shapes are supported:
+//
+//  • Unified ("The X Subscription", Oct 2026+): one weekly included pool
+//    shared across Cursor, Bugbot, Grok Bot and Grok, plus prepaid
+//    "additional usage". Read from the grok.com dashboard API
+//    (GET /dashboard/api/dashboard/v2/usage-status?scope=user).
+//  • Legacy Cursor plans (Pro / Pro+ / Ultra / Teams): two monthly pools
+//    plus on-demand. Read from cursor.com GET /api/usage-summary; auth is
+//    the WorkosCursorSessionToken cookie.
+//
+// Both are unofficial dashboard endpoints called with the user's existing
+// browser session (host_permissions + credentials: "include").
 
 const DEBUG = false;
 const dbg = (...args) => { if (DEBUG) console.log("[Cursor Usage Badge]", ...args); };
 
 const DEFAULT_STATE = {
+  mode: null,           // "unified" | "legacy" | null
   pools: {
+    weekly: null,       // unified only: { utilization, label, products: [{ label, pct }] }
     cursorModels: null, // { utilization, label }
     otherModels: null,  // { utilization, label }
   },
@@ -30,10 +40,12 @@ const DEFAULT_STATE = {
     utilization: null,  // uncapped % when limit is set
     overLimit: null,
     inUse: null,        // on + a pool exhausted
+    resetsAt: null,     // unified: monthly additional-usage reset (epoch ms)
+    creditBalanceUsd: null, // unified: prepaid credit remaining
   },
   subscriptionTier: null,
   billingCycleStart: null,
-  billingCycleEnd: null, // epoch ms — shared reset for both pools
+  billingCycleEnd: null, // epoch ms — pool reset (weekly on unified, monthly on legacy)
   lastUpdated: null,
   lastErrorAt: null,
   lastError: null,
@@ -65,6 +77,9 @@ function normalizeTier(raw) {
   if (s === "pro_plus" || s === "proplus" || s.includes("pro_plus") || s.includes("proplus")) {
     return "pro_plus";
   }
+  if (s === "plus") return "plus";
+  if (s === "premium" || s.includes("premium")) return "premium";
+  if (s === "super" || s.startsWith("super")) return "super";
   if (s === "enterprise" || s.includes("enterprise")) return "enterprise";
   if (s === "team" || s.includes("team") || s.includes("business")) return "team";
   if (s === "pro" || s === "hobby" || s.includes("pro")) return "pro";
@@ -78,31 +93,57 @@ function numOrNull(v) {
 
 // ─── Badge rendering ────────────────────────────────────────────────────────
 
+// Toolbar badge: deeper tones of the Grok code-syntax palette so white
+// badge text stays readable at ~9px on light and dark Chrome toolbars.
+// Live % badge overlay — same traffic-light bands as Claude Usage Badge.
 const COLOR_GREEN = "#15803D";
 const COLOR_AMBER = "#B45309";
 const COLOR_RED = "#B91C1C";
-const COLOR_GREY = "#52525B";
+const COLOR_GREY = "#3F3F46";
 const BADGE_TEXT = "#FFFFFF";
 
-function computeBadge(state) {
-  const cursorPct = state.pools?.cursorModels?.utilization ?? null;
-  const otherPct = state.pools?.otherModels?.utilization ?? null;
-  const onDemand = state.onDemand || {};
+// Icon brand accents (xAI orange ring + SpaceX starlight hex).
+const ICON_ORANGE = "#FF6308";
+const ICON_HEX = "#F0F0FA";
+const ICON_BG = "#0A0A0A";
+const ICON_TRACK = "#2A2A2A";
 
-  const candidates = [cursorPct, otherPct].filter((v) => v != null);
+// Match cursor.com/dashboard/spending display rounding.
+function displayPct(pct) {
+  if (pct == null || !Number.isFinite(pct)) return null;
+  if (pct <= 0) return 0;
+  const rounded = Math.round(pct);
+  return rounded === 0 ? 1 : Math.min(999, rounded);
+}
+
+function computeBadge(state) {
+  const unified = state.mode === "unified";
+  const weeklyPct = unified ? state.pools?.weekly?.utilization ?? null : null;
+  const cursorPct = unified ? null : state.pools?.cursorModels?.utilization ?? null;
+  const otherPct = unified ? null : state.pools?.otherModels?.utilization ?? null;
+  const onDemand = state.onDemand || {};
+  const odName = unified ? "Additional usage" : "On-demand";
+
+  const candidates = [weeklyPct, cursorPct, otherPct].filter((v) => v != null);
   if (candidates.length === 0) {
     if (state.lastError) {
       return {
         text: "!",
         color: COLOR_GREY,
-        title: `Cursor Usage Badge — ${state.lastError}`,
+        title: `Cursor Usage Tracker — ${state.lastError}`,
+        fillPct: 0,
       };
     }
-    return { text: "", color: COLOR_GREY, title: "Cursor Usage Badge — no data yet" };
+    return {
+      text: "",
+      color: COLOR_GREY,
+      title: "Cursor Usage Tracker — no data yet",
+      fillPct: 0,
+    };
   }
 
   const worst = Math.max(...candidates);
-  const pct = Math.min(999, Math.round(worst));
+  const pct = displayPct(worst);
   const text = `${pct}%`;
 
   let color;
@@ -112,38 +153,45 @@ function computeBadge(state) {
   else color = COLOR_GREEN;
 
   const parts = [];
-  if (cursorPct != null) parts.push(`Cursor Models: ${Math.round(cursorPct)}%`);
-  if (otherPct != null) parts.push(`Other Models: ${Math.round(otherPct)}%`);
+  if (weeklyPct != null) parts.push(`Weekly pool: ${displayPct(weeklyPct)}%`);
+  if (cursorPct != null) parts.push(`Cursor Models: ${displayPct(cursorPct)}%`);
+  if (otherPct != null) parts.push(`Other Models: ${displayPct(otherPct)}%`);
   if (onDemand.status === "on") {
     const label = onDemand.overLimit
-      ? "On-demand: OVER LIMIT"
+      ? `${odName}: OVER LIMIT`
       : onDemand.inUse
-        ? "On-demand: IN USE"
-        : "On-demand: ON";
+        ? `${odName}: IN USE`
+        : `${odName}: ON`;
     parts.push(label);
     if (onDemand.usedUsd != null && onDemand.limitUsd != null) {
       const upct =
-        onDemand.utilization != null ? ` (${Math.round(onDemand.utilization)}%)` : "";
+        onDemand.utilization != null ? ` (${displayPct(onDemand.utilization)}%)` : "";
       parts.push(
         `$${onDemand.usedUsd.toFixed(2)} / $${onDemand.limitUsd.toFixed(2)}${upct}`
       );
     } else if (onDemand.usedUsd != null) {
-      parts.push(`~$${onDemand.usedUsd.toFixed(2)} on-demand`);
+      parts.push(
+        unified
+          ? `$${onDemand.usedUsd.toFixed(2)} this month`
+          : `~$${onDemand.usedUsd.toFixed(2)} on-demand`
+      );
+    }
+    if (unified && onDemand.creditBalanceUsd != null) {
+      parts.push(`Credit: $${onDemand.creditBalanceUsd.toFixed(2)}`);
     }
   } else if (onDemand.status === "off") {
-    parts.push("On-demand: OFF");
+    parts.push(`${odName}: OFF`);
   }
   if (state.billingCycleEnd) {
-    const mins = Math.max(0, Math.round((state.billingCycleEnd - Date.now()) / 60000));
-    if (mins > 0) {
-      const hrs = Math.floor(mins / 60);
-      if (hrs < 48) {
+    const diff = state.billingCycleEnd - Date.now();
+    if (diff > 0) {
+      const days = Math.ceil(diff / 86400000);
+      if (days >= 2) parts.push(`Resets in ${days}d`);
+      else {
+        const mins = Math.max(0, Math.round(diff / 60000));
+        const hrs = Math.floor(mins / 60);
         const rm = mins % 60;
         parts.push(rm > 0 ? `Resets in ${hrs}h ${rm}m` : `Resets in ${hrs}h`);
-      } else {
-        const days = Math.floor(hrs / 24);
-        const rh = hrs % 24;
-        parts.push(rh > 0 ? `Resets in ${days}d ${rh}h` : `Resets in ${days}d`);
       }
     }
   }
@@ -151,13 +199,130 @@ function computeBadge(state) {
     parts.push(`Last refresh failed: ${state.lastError}`);
   }
 
-  return { text, color, title: parts.join(" · ") };
+  return {
+    text,
+    color,
+    title: parts.join(" · "),
+    fillPct: Math.max(0, Math.min(100, worst)),
+  };
+}
+
+// ─── Dynamic toolbar icon (filled rounded hex + progress ring) ──────────────
+
+function hexPoints(cx, cy, r) {
+  // Pointy-top hexagon (Cursor cube silhouette).
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 3;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return pts;
+}
+
+function roundedHexPath(ctx, cx, cy, r, cornerR) {
+  const pts = hexPoints(cx, cy, r);
+  const n = pts.length;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const prev = pts[(i + n - 1) % n];
+    const curr = pts[i];
+    const next = pts[(i + 1) % n];
+    const dPrev = Math.hypot(prev[0] - curr[0], prev[1] - curr[1]) || 1;
+    const dNext = Math.hypot(next[0] - curr[0], next[1] - curr[1]) || 1;
+    const rr = Math.min(cornerR, dPrev * 0.18, dNext * 0.18);
+    const fromPrev = [
+      curr[0] + ((prev[0] - curr[0]) / dPrev) * rr,
+      curr[1] + ((prev[1] - curr[1]) / dPrev) * rr,
+    ];
+    const toNext = [
+      curr[0] + ((next[0] - curr[0]) / dNext) * rr,
+      curr[1] + ((next[1] - curr[1]) / dNext) * rr,
+    ];
+    if (i === 0) ctx.moveTo(fromPrev[0], fromPrev[1]);
+    else ctx.lineTo(fromPrev[0], fromPrev[1]);
+    ctx.quadraticCurveTo(curr[0], curr[1], toNext[0], toNext[1]);
+  }
+  ctx.closePath();
+}
+
+function paintIcon(ctx, size, fillPct, ringColor) {
+  const cx = size / 2;
+  const cy = size / 2;
+  ctx.clearRect(0, 0, size, size);
+
+  // Soft near-black disc so the mark reads on light & dark toolbars.
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.48, 0, Math.PI * 2);
+  ctx.fillStyle = ICON_BG;
+  ctx.fill();
+
+  const ringR = size * 0.38;
+  const ringW = Math.max(2, size * 0.1);
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = ICON_TRACK;
+  ctx.lineWidth = ringW;
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  const pct = Math.max(0, Math.min(100, fillPct || 0));
+  if (pct > 0) {
+    const start = -Math.PI / 2;
+    // Minimum visible sweep so sub-1% usage still shows a tick.
+    const sweep = Math.max((pct / 100) * Math.PI * 2, 0.14);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, start, start + sweep);
+    // Ring always uses xAI orange; severity is the % badge overlay color.
+    ctx.strokeStyle = ICON_ORANGE;
+    ctx.lineWidth = ringW;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  }
+
+  // Solid filled hexagon with rounded corners — SpaceX starlight, not pure white.
+  const hexR = size * 0.2;
+  const cornerR = Math.max(1.2, size * 0.045);
+  roundedHexPath(ctx, cx, cy, hexR, cornerR);
+  ctx.fillStyle = ICON_HEX;
+  ctx.fill();
+}
+
+function drawIconBitmap(size, fillPct, ringColor) {
+  // 4× supersample then downscale — kills the cheap aliased hex edges.
+  const scale = 4;
+  const big = size * scale;
+  const hi = new OffscreenCanvas(big, big);
+  const hctx = hi.getContext("2d");
+  hctx.imageSmoothingEnabled = true;
+  hctx.imageSmoothingQuality = "high";
+  paintIcon(hctx, big, fillPct, ringColor);
+
+  const lo = new OffscreenCanvas(size, size);
+  const lctx = lo.getContext("2d");
+  lctx.imageSmoothingEnabled = true;
+  lctx.imageSmoothingQuality = "high";
+  lctx.clearRect(0, 0, size, size);
+  lctx.drawImage(hi, 0, 0, big, big, 0, 0, size, size);
+  return lctx.getImageData(0, 0, size, size);
+}
+
+async function setProgressIcon(fillPct, ringColor) {
+  try {
+    const images = {
+      16: drawIconBitmap(16, fillPct, ringColor),
+      32: drawIconBitmap(32, fillPct, ringColor),
+    };
+    await chrome.action.setIcon({ imageData: images });
+  } catch (e) {
+    dbg("setProgressIcon failed:", e);
+  }
 }
 
 async function refreshBadge() {
   const { usageState } = await chrome.storage.local.get("usageState");
   const state = usageState || DEFAULT_STATE;
-  const { text, color, title } = computeBadge(state);
+  const { text, color, title, fillPct } = computeBadge(state);
   await chrome.action.setBadgeText({ text });
   await chrome.action.setBadgeBackgroundColor({ color });
   try {
@@ -166,6 +331,7 @@ async function refreshBadge() {
     // Older Chrome — auto text color is the graceful fallback.
   }
   await chrome.action.setTitle({ title });
+  await setProgressIcon(fillPct ?? 0, color);
 }
 
 // ─── State writes (serialized) ──────────────────────────────────────────────
@@ -247,6 +413,27 @@ async function apiPost(endpoint, body = {}) {
     },
     body: JSON.stringify(body),
   });
+  if (!resp.ok) throw new ApiError(resp.status, endpoint);
+  try {
+    return await resp.json();
+  } catch {
+    throw new ApiError(0, endpoint);
+  }
+}
+
+// grok.com dashboard API (unified accounts). Signed-out responses are a 401
+// or a cross-origin redirect to the sign-in host — both surface as a throw.
+async function grokApi(method, endpoint) {
+  const init = {
+    method,
+    credentials: "include",
+    headers: { Accept: "application/json" },
+  };
+  if (method === "POST") {
+    init.headers["Content-Type"] = "application/json";
+    init.body = "{}";
+  }
+  const resp = await fetch(`https://grok.com/dashboard/api/dashboard${endpoint}`, init);
   if (!resp.ok) throw new ApiError(resp.status, endpoint);
   try {
     return await resp.json();
@@ -345,7 +532,9 @@ function parseUsageSummary(summary, period = null) {
   else if (odEnabled === false) status = "off";
 
   return {
+    mode: "legacy",
     pools: {
+      weekly: null,
       cursorModels:
         autoPct != null
           ? { utilization: autoPct, label: "Cursor Models" }
@@ -371,6 +560,8 @@ function parseUsageSummary(summary, period = null) {
       utilization,
       overLimit,
       inUse,
+      resetsAt: null,
+      creditBalanceUsd: null,
     },
     subscriptionTier: normalizeTier(
       summary?.membershipType || period?.membershipType || null
@@ -382,6 +573,135 @@ function parseUsageSummary(summary, period = null) {
       summary?.billingCycleEnd || period?.billingCycleEnd
     ),
   };
+}
+
+// ─── Parse grok.com usage-status (unified accounts) ─────────────────────────
+
+const PRODUCT_LABELS = {
+  cursor: "Cursor",
+  bugbot: "Bugbot",
+  "grok-bot": "Grok Bot",
+  "grok-chat": "Grok",
+  api: "API",
+};
+
+function productLabel(id) {
+  if (PRODUCT_LABELS[id]) return PRODUCT_LABELS[id];
+  return String(id || "Other")
+    .split(/[-_\s]+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
+// Whole-number product shares that sum to the displayed total (largest
+// remainder), matching the grok.com usage page (e.g. 27 + 3 + 2 = 32%).
+function splitProducts(byProduct, budgetCents, totalDisplay) {
+  const rows = (Array.isArray(byProduct) ? byProduct : [])
+    .map((p) => ({ id: p?.product, cents: numOrNull(Number(p?.cents)) }))
+    .filter((p) => p.id && p.cents != null && p.cents > 0)
+    .map((p) => {
+      const raw = (p.cents / budgetCents) * 100;
+      return { label: productLabel(p.id), raw, pct: Math.floor(raw) };
+    });
+  let left = Math.max(0, (totalDisplay ?? 0) - rows.reduce((a, r) => a + r.pct, 0));
+  const byFrac = [...rows].sort((a, b) => (b.raw - b.pct) - (a.raw - a.pct));
+  for (const r of byFrac) {
+    if (left <= 0) break;
+    r.pct += 1;
+    left -= 1;
+  }
+  return rows
+    .filter((r) => r.pct > 0)
+    .sort((a, b) => b.raw - a.raw)
+    .map(({ label, pct }) => ({ label, pct }));
+}
+
+// status: GET /v2/usage-status?scope=user. sand: POST /get-sand-usage-status
+// (optional — plan name, prepaid credit, isUnified). Returns null when the
+// account has no metered weekly pool.
+function parseUnified(status, sand = null) {
+  const w = status?.weeklyIncludedUsage || {};
+  const used = numOrNull(Number(w.usedCents));
+  const budget = numOrNull(Number(w.budgetCents));
+  let weeklyPct = null;
+  if (used != null && budget != null && budget > 0) weeklyPct = (used / budget) * 100;
+  else if (numOrNull(sand?.usagePercent) != null && sand?.hasNonZeroIncludedLimit) {
+    weeklyPct = sand.usagePercent;
+  }
+  if (weeklyPct == null) return null;
+
+  const m = status?.monthlyUsage || {};
+  const usedUsd = centsToUsd(numOrNull(Number(m.usedCents ?? NaN)));
+  const limitRaw = m.limitCents == null ? null : numOrNull(Number(m.limitCents));
+  const limitUsd = centsToUsd(limitRaw);
+  const enabled =
+    typeof m.additionalUsageOff === "boolean" ? !m.additionalUsageOff : null;
+  const utilization =
+    usedUsd != null && limitUsd != null && limitUsd > 0
+      ? (usedUsd / limitUsd) * 100
+      : null;
+  const overLimit =
+    usedUsd != null && limitUsd != null && limitUsd > 0 && usedUsd > limitUsd;
+  const credit = centsToUsd(numOrNull(Number(sand?.prepaidAvailableCents ?? NaN)));
+
+  return {
+    mode: "unified",
+    pools: {
+      weekly: {
+        utilization: weeklyPct,
+        label: "Weekly included",
+        products:
+          budget != null && budget > 0
+            ? splitProducts(status?.weeklyIncludedUsageByProduct, budget, displayPct(weeklyPct))
+            : [],
+      },
+      cursorModels: null,
+      otherModels: null,
+    },
+    planDetail: { ...DEFAULT_STATE.planDetail },
+    onDemand: {
+      enabled,
+      status: enabled === true ? "on" : enabled === false ? "off" : null,
+      usedUsd,
+      limitUsd,
+      remainingUsd:
+        usedUsd != null && limitUsd != null ? Math.max(0, limitUsd - usedUsd) : null,
+      utilization,
+      overLimit,
+      inUse: enabled === true && weeklyPct >= 100,
+      resetsAt: toEpoch(m.resetsAt),
+      creditBalanceUsd: credit,
+    },
+    subscriptionTier: normalizeTier(sand?.cursorPlanName || null),
+    billingCycleStart: toEpoch(w.periodStart || sand?.currentPeriodStart),
+    billingCycleEnd: toEpoch(w.resetsAt || sand?.nextResetTimestampUtc),
+  };
+}
+
+// Returns { parsed, preferred } or null when grok.com has no usable session
+// or no weekly pool. `preferred` = this account is on the unified plan, so
+// grok.com is the source of truth and cursor.com is not consulted.
+async function fetchUnified() {
+  let status;
+  try {
+    status = await grokApi("GET", "/v2/usage-status?scope=user");
+  } catch (e) {
+    dbg("grok usage-status unavailable:", e);
+    return null;
+  }
+  let sand = null;
+  try {
+    sand = await grokApi("POST", "/get-sand-usage-status");
+  } catch (e) {
+    dbg("grok sand-usage-status unavailable:", e);
+  }
+  dbg("grok usage-status:", status, sand);
+  const parsed = parseUnified(status, sand);
+  if (!parsed) return null;
+  const preferred =
+    sand?.isUnified === true ||
+    (sand == null && status?.weeklyIncludedStatus?.status === "metered");
+  return { parsed, preferred };
 }
 
 function summaryHasPoolData(parsed) {
@@ -409,11 +729,35 @@ async function doFetchUsage(force = false) {
     if (Date.now() < backoffUntil) return;
   }
 
+  const commit = async (parsed) => {
+    await patchThrottle({ backoffUntil: 0 });
+    await mergeState({
+      ...parsed,
+      lastUpdated: Date.now(),
+      lastError: null,
+      errorCode: null,
+    });
+  };
+
+  // Unified (X Subscription) accounts live on grok.com; try that first and
+  // keep the result as a fallback if the legacy cursor.com path fails.
+  let unified = null;
+
   try {
+    unified = await fetchUnified();
+    if (unified?.preferred) {
+      await commit(unified.parsed);
+      return;
+    }
+
     const signedIn = await hasSessionCookie();
     if (!signedIn) {
+      if (unified) {
+        await commit(unified.parsed);
+        return;
+      }
       await mergeState({
-        lastError: "Not signed in to Cursor.",
+        lastError: "Not signed in to Cursor or Grok.",
         errorCode: "no_session",
         lastErrorAt: Date.now(),
       });
@@ -457,6 +801,10 @@ async function doFetchUsage(force = false) {
     }
 
     if (!summaryHasPoolData(parsed)) {
+      if (unified) {
+        await commit(unified.parsed);
+        return;
+      }
       await mergeState({
         ...parsed,
         lastError: "Usage summary had no pool percentages.",
@@ -474,6 +822,10 @@ async function doFetchUsage(force = false) {
       errorCode: null,
     });
   } catch (err) {
+    if (unified) {
+      await commit(unified.parsed);
+      return;
+    }
     console.error("[Cursor Usage Badge] fetch error:", err);
     let errorCode = "unknown";
     let lastError = err.message || "Failed to fetch usage";
