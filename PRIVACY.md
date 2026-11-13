@@ -15,7 +15,7 @@ To fulfill that single purpose, the extension:
 1. **Reads your Cursor session cookie** (`WorkosCursorSessionToken` on `cursor.com`) so it can call Cursor’s dashboard usage APIs while you are signed in. The extension does not ask you to paste a token and does not modify or store the cookie value separately.
 2. **Requests usage summary data from `cursor.com`** (the same unofficial dashboard APIs used by Cursor’s spending/usage pages).
 3. **Requests usage data from `grok.com`** (the unofficial dashboard APIs behind grok.com/dashboard/usage, where The X Subscription reports Cursor usage) using your existing signed-in grok.com session. The extension does not read, copy, or store grok.com cookies.
-4. **Stores a local cache** of usage state (percentages, plan tier, reset times, last error, last refresh time) in Chrome’s `chrome.storage` on your device so the badge and popup can update without re-fetching every click.
+4. **Stores a local cache** of usage state in Chrome’s `chrome.storage` on your device so the badge and popup can update without re-fetching every click. The cache holds: usage percentages (including the split by product), plan tier, reset times, last error, last refresh time, and money amounts shown on your usage dashboard — additional-usage or on-demand spend, your spending limit and the amount remaining, and your prepaid credit balance. The extension does not read or store your name, email address, username, account ID, payment card, or billing details.
 
 ## What we do not do
 
@@ -26,6 +26,15 @@ To fulfill that single purpose, the extension:
 - We do not use remote code; all JavaScript ships inside the extension package.
 
 Network requests go only to `https://cursor.com/*` and `https://grok.com/*` so the extension can read your usage while you are logged in. The privacy practices of Cursor and SpaceXSI apply to data they process on their servers.
+
+## Limited Use
+
+The extension’s use of information received from the `cursor.com` and `grok.com` dashboards complies with the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), including the Limited Use requirements:
+
+- **Allowed use.** The data is used only to provide the extension’s single purpose: showing your Cursor usage in the Chrome toolbar and popup.
+- **Allowed transfer.** The data is not transferred to anyone. It stays in Chrome’s local storage on your device.
+- **No advertising.** The data is never used or transferred for personalized advertising, retargeting, or any other advertising purpose.
+- **No human reading.** No person, including the extension’s author, can read your data. It never leaves your device.
 
 ## Permissions
 
