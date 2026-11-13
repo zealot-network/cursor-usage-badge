@@ -14,7 +14,7 @@ To fulfill that single purpose, the extension:
 
 1. **Reads your Cursor session cookie** (`WorkosCursorSessionToken` on `cursor.com`) so it can call Cursor’s dashboard usage APIs while you are signed in. The extension does not ask you to paste a token and does not modify or store the cookie value separately.
 2. **Requests usage summary data from `cursor.com`** (the same unofficial dashboard APIs used by Cursor’s spending/usage pages).
-3. **Requests usage data from `grok.com`** (the unofficial dashboard APIs behind grok.com/dashboard/usage, where The X Subscription reports Cursor usage) using your existing signed-in grok.com session. The extension does not read, copy, or store grok.com cookies.
+3. **Requests usage data from `grok.com`** with one read-only request (`GET /dashboard/api/dashboard/v2/usage-status`, the unofficial dashboard endpoint behind grok.com/dashboard/usage, where The X Subscription reports Cursor usage) using your existing signed-in grok.com session. The extension does not read, copy, or store grok.com cookies.
 4. **Stores a local cache** of usage state in Chrome’s `chrome.storage` on your device so the badge and popup can update without re-fetching every click. The cache holds: usage percentages (including the split by product), plan tier, reset times, last error, last refresh time, and money amounts shown on your usage dashboard — additional-usage or on-demand spend, your spending limit, and the amount remaining. The extension does not read or store your prepaid credit balance, name, email address, username, account ID, payment card, or billing details.
 
 ## What we do not do

@@ -83,7 +83,7 @@ There's no build step. Edit the files in place and reload the extension at `chro
 To package for the Chrome Web Store:
 
 ```bash
-zip -r ../cursor-usage-badge-v0.2.0.zip . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*"
+zip -r ../cursor-usage-badge-v0.2.1.zip . -x "*.DS_Store" -x "__MACOSX/*" -x ".git/*"
 ```
 
 ## Smoke test
