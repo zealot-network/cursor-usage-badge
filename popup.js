@@ -230,6 +230,8 @@ function render(state) {
 
   const tierEl = $("tier-pill");
   tierEl.textContent = formatTier(state.subscriptionTier);
+  // The X Subscription plan name is not readable from an extension.
+  tierEl.style.display = unified && !state.subscriptionTier ? "none" : "";
   tierEl.title = state.subscriptionTier
     ? unified ? "Detected plan (The X Subscription)" : "Detected Cursor plan"
     : "Plan not detected yet — open your usage dashboard and refresh";

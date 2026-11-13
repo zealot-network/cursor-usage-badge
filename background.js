@@ -6,7 +6,8 @@
 //  • Unified ("The X Subscription", Oct 2026+): one weekly included pool
 //    shared across Cursor, Bugbot, Grok Bot and Grok, plus prepaid
 //    "additional usage". Read from the grok.com dashboard API
-//    (GET /dashboard/api/dashboard/v2/usage-status?scope=user).
+//    (GET /dashboard/api/dashboard/v2/usage-status?scope=user). Plan name
+//    and prepaid credit are not readable from an extension (see grokGet).
 //  • Legacy Cursor plans (Pro / Pro+ / Ultra / Teams): two monthly pools
 //    plus on-demand. Read from cursor.com GET /api/usage-summary; auth is
 //    the WorkosCursorSessionToken cookie.
@@ -41,7 +42,7 @@ const DEFAULT_STATE = {
     overLimit: null,
     inUse: null,        // on + a pool exhausted
     resetsAt: null,     // unified: monthly additional-usage reset (epoch ms)
-    creditBalanceUsd: null, // unified: prepaid credit remaining
+    creditBalanceUsd: null, // reserved: not readable from an extension today
   },
   subscriptionTier: null,
   billingCycleStart: null,
@@ -175,9 +176,6 @@ function computeBadge(state) {
           ? `$${onDemand.usedUsd.toFixed(2)} this month`
           : `~$${onDemand.usedUsd.toFixed(2)} on-demand`
       );
-    }
-    if (unified && onDemand.creditBalanceUsd != null) {
-      parts.push(`Credit: $${onDemand.creditBalanceUsd.toFixed(2)}`);
     }
   } else if (onDemand.status === "off") {
     parts.push(`${odName}: OFF`);
@@ -393,6 +391,7 @@ async function apiGet(endpoint) {
     method: "GET",
     credentials: "include",
     headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!resp.ok) throw new ApiError(resp.status, endpoint);
   try {
@@ -412,6 +411,7 @@ async function apiPost(endpoint, body = {}) {
       Origin: "https://cursor.com",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!resp.ok) throw new ApiError(resp.status, endpoint);
   try {
@@ -421,19 +421,22 @@ async function apiPost(endpoint, body = {}) {
   }
 }
 
-// grok.com dashboard API (unified accounts). Signed-out responses are a 401
-// or a cross-origin redirect to the sign-in host — both surface as a throw.
-async function grokApi(method, endpoint) {
-  const init = {
-    method,
+// Dashboard calls are abandoned after this long so a hanging host cannot
+// stall the refresh cycle. grok.com has been measured at ~9s on a cold call.
+const FETCH_TIMEOUT_MS = 20_000;
+
+// grok.com dashboard API (unified accounts). Only GET is usable from an
+// extension: grok.com rejects POSTs whose Origin is chrome-extension://
+// ("Invalid origin for state-changing request"), so plan name and prepaid
+// credit balance are not available. Signed-out responses are a 401 or a
+// cross-origin redirect to the sign-in host — both surface as a throw.
+async function grokGet(endpoint) {
+  const resp = await fetch(`https://grok.com/dashboard/api/dashboard${endpoint}`, {
+    method: "GET",
     credentials: "include",
     headers: { Accept: "application/json" },
-  };
-  if (method === "POST") {
-    init.headers["Content-Type"] = "application/json";
-    init.body = "{}";
-  }
-  const resp = await fetch(`https://grok.com/dashboard/api/dashboard${endpoint}`, init);
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
   if (!resp.ok) throw new ApiError(resp.status, endpoint);
   try {
     return await resp.json();
@@ -616,19 +619,14 @@ function splitProducts(byProduct, budgetCents, totalDisplay) {
     .map(({ label, pct }) => ({ label, pct }));
 }
 
-// status: GET /v2/usage-status?scope=user. sand: POST /get-sand-usage-status
-// (optional — plan name, prepaid credit, isUnified). Returns null when the
-// account has no metered weekly pool.
-function parseUnified(status, sand = null) {
+// status: GET /v2/usage-status?scope=user. Returns null when the account
+// has no metered weekly pool.
+function parseUnified(status) {
   const w = status?.weeklyIncludedUsage || {};
   const used = numOrNull(Number(w.usedCents));
   const budget = numOrNull(Number(w.budgetCents));
-  let weeklyPct = null;
-  if (used != null && budget != null && budget > 0) weeklyPct = (used / budget) * 100;
-  else if (numOrNull(sand?.usagePercent) != null && sand?.hasNonZeroIncludedLimit) {
-    weeklyPct = sand.usagePercent;
-  }
-  if (weeklyPct == null) return null;
+  if (used == null || budget == null || budget <= 0) return null;
+  const weeklyPct = (used / budget) * 100;
 
   const m = status?.monthlyUsage || {};
   const usedUsd = centsToUsd(numOrNull(Number(m.usedCents ?? NaN)));
@@ -642,7 +640,6 @@ function parseUnified(status, sand = null) {
       : null;
   const overLimit =
     usedUsd != null && limitUsd != null && limitUsd > 0 && usedUsd > limitUsd;
-  const credit = centsToUsd(numOrNull(Number(sand?.prepaidAvailableCents ?? NaN)));
 
   return {
     mode: "unified",
@@ -650,10 +647,11 @@ function parseUnified(status, sand = null) {
       weekly: {
         utilization: weeklyPct,
         label: "Weekly included",
-        products:
-          budget != null && budget > 0
-            ? splitProducts(status?.weeklyIncludedUsageByProduct, budget, displayPct(weeklyPct))
-            : [],
+        products: splitProducts(
+          status?.weeklyIncludedUsageByProduct,
+          budget,
+          displayPct(weeklyPct)
+        ),
       },
       cursorModels: null,
       otherModels: null,
@@ -670,38 +668,37 @@ function parseUnified(status, sand = null) {
       overLimit,
       inUse: enabled === true && weeklyPct >= 100,
       resetsAt: toEpoch(m.resetsAt),
-      creditBalanceUsd: credit,
+      creditBalanceUsd: null,
     },
-    subscriptionTier: normalizeTier(sand?.cursorPlanName || null),
-    billingCycleStart: toEpoch(w.periodStart || sand?.currentPeriodStart),
-    billingCycleEnd: toEpoch(w.resetsAt || sand?.nextResetTimestampUtc),
+    subscriptionTier: null,
+    billingCycleStart: toEpoch(w.periodStart),
+    billingCycleEnd: toEpoch(w.resetsAt),
   };
 }
 
-// Returns { parsed, preferred } or null when grok.com has no usable session
-// or no weekly pool. `preferred` = this account is on the unified plan, so
-// grok.com is the source of truth and cursor.com is not consulted.
+const CURSOR_PRODUCTS = new Set(["cursor", "bugbot"]);
+
+// Returns { parsed, hasCursorUsage }, { failed: "auth" | "network" }, or null
+// when grok.com answered but the account has no metered weekly pool.
 async function fetchUnified() {
   let status;
   try {
-    status = await grokApi("GET", "/v2/usage-status?scope=user");
+    status = await grokGet("/v2/usage-status?scope=user");
   } catch (e) {
     dbg("grok usage-status unavailable:", e);
-    return null;
+    const auth = e instanceof ApiError && (e.status === 401 || e.status === 403);
+    // A redirect to the sign-in host surfaces as a TypeError: treat as signed out.
+    const signedOut = auth || (e instanceof TypeError && e.name !== "TimeoutError");
+    return { failed: signedOut ? "auth" : "network" };
   }
-  let sand = null;
-  try {
-    sand = await grokApi("POST", "/get-sand-usage-status");
-  } catch (e) {
-    dbg("grok sand-usage-status unavailable:", e);
-  }
-  dbg("grok usage-status:", status, sand);
-  const parsed = parseUnified(status, sand);
+  dbg("grok usage-status:", status);
+  if (status?.weeklyIncludedStatus?.status !== "metered") return null;
+  const parsed = parseUnified(status);
   if (!parsed) return null;
-  const preferred =
-    sand?.isUnified === true ||
-    (sand == null && status?.weeklyIncludedStatus?.status === "metered");
-  return { parsed, preferred };
+  const hasCursorUsage = (status.weeklyIncludedUsageByProduct || []).some(
+    (p) => CURSOR_PRODUCTS.has(p?.product) && Number(p?.cents) > 0
+  );
+  return { parsed, hasCursorUsage };
 }
 
 function summaryHasPoolData(parsed) {
@@ -741,24 +738,27 @@ async function doFetchUsage(force = false) {
 
   // Unified (X Subscription) accounts live on grok.com; try that first and
   // keep the result as a fallback if the legacy cursor.com path fails.
+  // grok.com cannot say whether an account is unified, so: a weekly pool that
+  // Cursor or Bugbot has drawn from is unified; otherwise a signed-in legacy
+  // cursor.com session wins, and the weekly pool is the fallback.
   let unified = null;
 
   try {
-    unified = await fetchUnified();
-    if (unified?.preferred) {
+    const grok = await fetchUnified();
+    unified = grok?.parsed ? grok : null;
+    const signedIn = await hasSessionCookie();
+    if (unified && (unified.hasCursorUsage || !signedIn)) {
       await commit(unified.parsed);
       return;
     }
 
-    const signedIn = await hasSessionCookie();
     if (!signedIn) {
-      if (unified) {
-        await commit(unified.parsed);
-        return;
-      }
+      const unreachable = grok?.failed === "network";
       await mergeState({
-        lastError: "Not signed in to Cursor or Grok.",
-        errorCode: "no_session",
+        lastError: unreachable
+          ? "Couldn't reach grok.com — will retry."
+          : "Not signed in to Cursor or Grok.",
+        errorCode: unreachable ? "network" : "no_session",
         lastErrorAt: Date.now(),
       });
       return;
@@ -846,6 +846,9 @@ async function doFetchUsage(force = false) {
       } else {
         errorCode = "network";
       }
+    } else if (err?.name === "TimeoutError") {
+      errorCode = "network";
+      lastError = "cursor.com took too long to respond — will retry.";
     } else if (err instanceof TypeError) {
       errorCode = "network";
       lastError = "Network error reaching cursor.com.";

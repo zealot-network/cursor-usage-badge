@@ -6,7 +6,7 @@ Cursor Usage Tracker & Badge (“the extension”, formerly Cursor Usage Badge) 
 
 ## What the extension does
 
-The extension shows your Cursor usage in the Chrome toolbar and popup. On The X Subscription: the weekly included pool (shared across Cursor, Bugbot, Grok Bot and Grok), its split by product, additional-usage spend, prepaid credit, plan tier, and reset timing. On legacy Cursor plans: monthly Cursor Models and Other Models pools, on-demand spend vs. limit, plan tier, and billing-cycle reset timing.
+The extension shows your Cursor usage in the Chrome toolbar and popup. On The X Subscription: the weekly included pool (shared across Cursor, Bugbot, Grok Bot and Grok), its split by product, additional-usage spend against your monthly limit, and reset timing. On legacy Cursor plans: monthly Cursor Models and Other Models pools, on-demand spend vs. limit, plan tier, and billing-cycle reset timing.
 
 ## Data the extension accesses
 
@@ -15,7 +15,7 @@ To fulfill that single purpose, the extension:
 1. **Reads your Cursor session cookie** (`WorkosCursorSessionToken` on `cursor.com`) so it can call Cursor’s dashboard usage APIs while you are signed in. The extension does not ask you to paste a token and does not modify or store the cookie value separately.
 2. **Requests usage summary data from `cursor.com`** (the same unofficial dashboard APIs used by Cursor’s spending/usage pages).
 3. **Requests usage data from `grok.com`** (the unofficial dashboard APIs behind grok.com/dashboard/usage, where The X Subscription reports Cursor usage) using your existing signed-in grok.com session. The extension does not read, copy, or store grok.com cookies.
-4. **Stores a local cache** of usage state in Chrome’s `chrome.storage` on your device so the badge and popup can update without re-fetching every click. The cache holds: usage percentages (including the split by product), plan tier, reset times, last error, last refresh time, and money amounts shown on your usage dashboard — additional-usage or on-demand spend, your spending limit and the amount remaining, and your prepaid credit balance. The extension does not read or store your name, email address, username, account ID, payment card, or billing details.
+4. **Stores a local cache** of usage state in Chrome’s `chrome.storage` on your device so the badge and popup can update without re-fetching every click. The cache holds: usage percentages (including the split by product), plan tier, reset times, last error, last refresh time, and money amounts shown on your usage dashboard — additional-usage or on-demand spend, your spending limit, and the amount remaining. The extension does not read or store your prepaid credit balance, name, email address, username, account ID, payment card, or billing details.
 
 ## What we do not do
 

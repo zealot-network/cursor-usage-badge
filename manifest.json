@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Cursor Usage Tracker & Badge",
   "version": "0.2.0",
-  "description": "Unofficial Cursor usage tracker: weekly X Subscription pool, legacy monthly pools, additional usage spend, and plan tier.",
+  "description": "Unofficial Cursor usage tracker: weekly X Subscription pool by product, legacy monthly pools, and additional usage spend.",
   "homepage_url": "https://github.com/zealot-network/cursor-usage-badge",
   "minimum_chrome_version": "111",
   "icons": {

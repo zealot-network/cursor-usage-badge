@@ -12,8 +12,8 @@ On The X Subscription the badge shows your weekly included pool; on a legacy pla
 - Weekly included pool percentage, shared across Cursor, Bugbot, Grok Bot and Grok
 - Split by product, matching the grok.com usage page
 - Weekly reset date with a live countdown
-- Additional usage: spend this month vs monthly limit, prepaid credit balance, over-limit flag
-- Plan pill: Free, Plus, Premium, Super, Ultra
+- Additional usage: spend this month vs monthly limit, with an over-limit flag
+- Not shown: plan name and prepaid credit balance. grok.com does not let an extension read them.
 
 The sections below apply to legacy Cursor plans.
 
@@ -48,7 +48,7 @@ The sections below apply to legacy Cursor plans.
 
 The extension reads the same unofficial dashboard APIs the web dashboards use, so the numbers match what you see there.
 
-- `background.js` — service worker, single source of truth. Every 3 minutes it first asks grok.com (`GET /dashboard/api/dashboard/v2/usage-status?scope=user`, plus `POST …/get-sand-usage-status` for plan name and credit). If the account is unified, that is the answer. Otherwise it polls cursor.com `GET /api/usage-summary`, falling back to `POST /api/dashboard/get-current-period-usage` if the summary is thin.
+- `background.js` — service worker, single source of truth. Every 3 minutes it first asks grok.com (`GET /dashboard/api/dashboard/v2/usage-status?scope=user`). If the weekly pool shows Cursor usage, or there is no cursor.com session, that is the answer. Otherwise it polls cursor.com `GET /api/usage-summary`, falling back to `POST /api/dashboard/get-current-period-usage` if the summary is thin.
 - `popup.html` / `popup.js` — the UI. Renders pool bars, on-demand card, plan pill, and reset countdown.
 
 Auth uses your existing browser sessions on `grok.com` and `cursor.com`. No token pasting required — just stay signed in to the dashboard in Chrome.
@@ -92,7 +92,7 @@ zip -r ../cursor-usage-badge-v0.2.0.zip . -x "*.DS_Store" -x "__MACOSX/*" -x ".g
 2. Open [grok.com/dashboard/usage](https://grok.com/dashboard/usage) (or cursor.com/dashboard/usage on a legacy plan) and confirm you're signed in
 3. Click the extension icon → **Refresh**
 4. Confirm the badge shows a percentage and the popup shows:
-   - Plan pill
+   - Plan pill (legacy plans only)
    - Reset date + countdown
    - Weekly pool % with product split (unified), or Cursor Models % and Other Models % (legacy)
    - Additional usage / on-demand status (and spend bar if a limit is set)
